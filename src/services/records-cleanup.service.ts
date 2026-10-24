@@ -23,6 +23,7 @@ import { Client } from "../models/Client.model";
 import { Court } from "../models/Court.model";
 import { AssetReference } from "../models/AssetReference.model";
 import { PasswordResetRequest } from "../models/PasswordResetRequest.model";
+import { PASSWORD_RESET_STATUSES } from "../constants/password-reset.const";
 
 function createEmptyCleanResult(): CronCollectionCleanResult {
   return { scanned: 0, eligible: 0, deleted: 0, skipped: 0, failed: 0 };
@@ -536,7 +537,7 @@ export async function executeRecordsCleanup(
   // MongoDB's TTL index on expiresAt auto-purges after 2 hours, but terminal
   // records that linger beyond the retention window are cleaned here too.
   const candidateResetRequests = await PasswordResetRequest.find({
-    status: { $in: ["consumed", "expired", "superseded"] },
+    status: { $in: [PASSWORD_RESET_STATUSES.CONSUMED, PASSWORD_RESET_STATUSES.EXPIRED, PASSWORD_RESET_STATUSES.SUPERSEDED] },
     createdAt: { $lte: cutoffDate },
   })
     .limit(boundedLimit + 1)
