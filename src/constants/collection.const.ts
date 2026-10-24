@@ -19,6 +19,7 @@ export const COLLECTIONS = {
   CASE_EXPENSES: "case_expenses",
   CLIENT_PAYMENTS: "client_payments",
   AUDIT_LOGS: "audit_logs",
+  PASSWORD_RESET_REQUESTS: "password_reset_requests",
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];
@@ -39,6 +40,7 @@ export const MODELS = {
   CASE_EXPENSE: "CaseExpense",
   CLIENT_PAYMENT: "ClientPayment",
   AUDIT_LOG: "AuditLog",
+  PASSWORD_RESET_REQUEST: "PasswordResetRequest",
 } as const;
 
 export type ModelName = (typeof MODELS)[keyof typeof MODELS];

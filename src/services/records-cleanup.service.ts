@@ -22,6 +22,7 @@ import { ClientPayment } from "../models/ClientPayment.model";
 import { Client } from "../models/Client.model";
 import { Court } from "../models/Court.model";
 import { AssetReference } from "../models/AssetReference.model";
+import { PasswordResetRequest } from "../models/PasswordResetRequest.model";
 
 function createEmptyCleanResult(): CronCollectionCleanResult {
   return { scanned: 0, eligible: 0, deleted: 0, skipped: 0, failed: 0 };
@@ -61,6 +62,7 @@ export async function executeRecordsCleanup(
     cases: createEmptyCleanResult(),
     clients: createEmptyCleanResult(),
     courts: createEmptyCleanResult(),
+    passwordResetRequests: createEmptyCleanResult(),
   };
 
   let hasMore = false;
@@ -524,13 +526,55 @@ export async function executeRecordsCleanup(
     }
   }
 
+
+  // ---------------------------------------------------------------------------
+  // Phase 7: Purge Stale Password Reset Requests
+  // ---------------------------------------------------------------------------
+  // Clean up requests that are in a terminal state (consumed, expired, superseded)
+  // AND were created more than the retention period ago.
+  // Active/verified requests are left untouched so in-flight resets still work.
+  // MongoDB's TTL index on expiresAt auto-purges after 2 hours, but terminal
+  // records that linger beyond the retention window are cleaned here too.
+  const candidateResetRequests = await PasswordResetRequest.find({
+    status: { $in: ["consumed", "expired", "superseded"] },
+    createdAt: { $lte: cutoffDate },
+  })
+    .limit(boundedLimit + 1)
+    .lean();
+
+  if (candidateResetRequests.length > boundedLimit) {
+    hasMore = true;
+    candidateResetRequests.pop();
+  }
+
+  counts.passwordResetRequests.scanned = candidateResetRequests.length;
+  counts.passwordResetRequests.eligible = candidateResetRequests.length;
+
+  for (const resetReq of candidateResetRequests) {
+    try {
+      const deleted = await PasswordResetRequest.deleteOne({ _id: resetReq._id });
+      if (deleted.deletedCount > 0) {
+        counts.passwordResetRequests.deleted++;
+      } else {
+        counts.passwordResetRequests.skipped++;
+      }
+    } catch (resetErr) {
+      counts.passwordResetRequests.failed++;
+      console.error(
+        `[CRON CLEANUP] Failed to delete PasswordResetRequest ${resetReq._id}:`,
+        resetErr
+      );
+    }
+  }
+
   const totalScanned =
     counts.tasks.scanned +
     counts.caseDocuments.scanned +
     counts.clientDocuments.scanned +
     counts.cases.scanned +
     counts.clients.scanned +
-    counts.courts.scanned;
+    counts.courts.scanned +
+    counts.passwordResetRequests.scanned;
 
   const totalEligible =
     counts.tasks.eligible +
@@ -538,7 +582,8 @@ export async function executeRecordsCleanup(
     counts.clientDocuments.eligible +
     counts.cases.eligible +
     counts.clients.eligible +
-    counts.courts.eligible;
+    counts.courts.eligible +
+    counts.passwordResetRequests.eligible;
 
   const totalDeleted =
     counts.tasks.deleted +
@@ -546,7 +591,8 @@ export async function executeRecordsCleanup(
     counts.clientDocuments.deleted +
     counts.cases.deleted +
     counts.clients.deleted +
-    counts.courts.deleted;
+    counts.courts.deleted +
+    counts.passwordResetRequests.deleted;
 
   const totalSkipped =
     counts.tasks.skipped +
@@ -554,7 +600,8 @@ export async function executeRecordsCleanup(
     counts.clientDocuments.skipped +
     counts.cases.skipped +
     counts.clients.skipped +
-    counts.courts.skipped;
+    counts.courts.skipped +
+    counts.passwordResetRequests.skipped;
 
   const totalFailed =
     counts.tasks.failed +
@@ -562,7 +609,8 @@ export async function executeRecordsCleanup(
     counts.clientDocuments.failed +
     counts.cases.failed +
     counts.clients.failed +
-    counts.courts.failed;
+    counts.courts.failed +
+    counts.passwordResetRequests.failed;
 
   return {
     success: totalFailed === 0,

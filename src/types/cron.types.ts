@@ -23,6 +23,7 @@ export interface CronRecordsCleanupResponse {
     cases: CronCollectionCleanResult;
     clients: CronCollectionCleanResult;
     courts: CronCollectionCleanResult;
+    passwordResetRequests: CronCollectionCleanResult;
   };
   totalScanned: number;
   totalEligible: number;
